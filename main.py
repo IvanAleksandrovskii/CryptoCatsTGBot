@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from uuid import UUID
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
@@ -21,7 +22,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 main_keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="/meow"),  KeyboardButton(text="/get_prices"), ]],
+    keyboard=[[KeyboardButton(text="/meow"), KeyboardButton(text="/get_prices"), ]],
     resize_keyboard=True
 )
 
@@ -37,12 +38,16 @@ async def start_handler(message: types.Message):
             user = await user_service.get_user(chat_id)
             if not user:
                 await user_service.create_user(chat_id, username)
-                await message.answer(f"Привет, {username}! Я бот для отслеживания цен криптовалют. И я люблю котиков :3", reply_markup=main_keyboard)
+                await message.answer(
+                    f"Привет, {username}! Я бот для отслеживания цен криптовалют. И я люблю котиков :3",
+                    reply_markup=main_keyboard)
             else:
-                await message.answer(f"С возвращением, {username}! Посмотрим цены или котиков?", reply_markup=main_keyboard)
+                await message.answer(f"С возвращением, {username}! Посмотрим цены или котиков?",
+                                     reply_markup=main_keyboard)
         except Exception as e:
             logging.error(f"Database error: {e}")
-            await message.answer("Извините, произошла ошибка. Пожалуйста, попробуйте позже.", reply_markup=main_keyboard)
+            await message.answer("Извините, произошла ошибка. Пожалуйста, попробуйте позже.",
+                                 reply_markup=main_keyboard)
         finally:
             await session.close()
 
@@ -60,15 +65,50 @@ async def meow_handler(message: types.Message):
             if retry < max_retry - 1:
                 await asyncio.sleep(1)
 
-    await message.answer("Извините, я не смог отправить изображение! Попробуйте еще раз позже.", reply_markup=main_keyboard)
+    await message.answer("Извините, я не смог отправить изображение! Попробуйте еще раз позже.",
+                         reply_markup=main_keyboard)
 
 
 @dp.message(Command("get_prices"))
 async def price_handler(message: types.Message):
-
     await asyncio.sleep(2)
 
     await message.answer(f"ЭТА КОМАНДА НЕ ДОСТРОЕНА", reply_markup=main_keyboard)
+
+
+@dp.message(Command("list_coins"))
+async def list_coins(message: types.Message):
+    chat_id = message.chat.id
+
+    async for session in db_helper.session_getter():
+        try:
+            user_service = UserService(session)
+            if not await user_service.is_superuser(chat_id):
+                await message.answer("У вас нет прав для выполнения этой команды.", reply_markup=main_keyboard)
+                return
+
+            coin_service = CoinService(session)
+            all_coins = await coin_service.get_all_coins()
+
+            if not all_coins:
+                await message.answer("Список монет пуст.", reply_markup=main_keyboard)
+                return
+
+            coins_text = "\n\n".join([
+                f"Код: {coin.code}\n"
+                f"ID для цены: {coin.coin_id_for_price_getter or 'Не указан'}\n"
+                f"ID: {coin.id}\n"
+                f"Название: {coin.name or 'Не указано'}"
+                for coin in all_coins
+            ])
+
+            await message.answer(f"Список всех монет:\n\n{coins_text}", reply_markup=main_keyboard)
+
+        except Exception as e:
+            logging.error(f"Failed to get all coins: {e}")
+            await message.answer("Произошла ошибка при получении списка монет.", reply_markup=main_keyboard)
+        finally:
+            await session.close()
 
 
 class AddCoinStates(StatesGroup):
@@ -181,7 +221,7 @@ class EditCoinStates(StatesGroup):
     CONFIRM_EDIT = State()
 
 
-@dp.message(Command("edit_coins"))
+@dp.message(Command("edit_coin"))
 async def start_edit_coins(message: types.Message, state: FSMContext):
     chat_id = message.chat.id
 
@@ -215,8 +255,8 @@ async def start_edit_coins(message: types.Message, state: FSMContext):
 @dp.message(EditCoinStates.CHOOSING_COIN)
 async def process_coin_choice(message: types.Message, state: FSMContext):
     try:
-        coin_id = str(message.text)
-        await state.update_data(coin_id=coin_id)
+        coin_id = UUID(message.text)
+        await state.update_data(coin_id=str(coin_id))
         await state.set_state(EditCoinStates.EDITING_CODE)
         await message.answer("Введите новый код монеты (или /skip для пропуска):")
     except ValueError:
@@ -264,6 +304,94 @@ async def process_edit_price_id(message: types.Message, state: FSMContext):
             await message.answer("Произошла ошибка при обновлении монеты.", reply_markup=main_keyboard)
         finally:
             await session.close()
+
+    await state.clear()
+
+
+class DeleteCoinStates(StatesGroup):
+    CHOOSING_COIN = State()
+    CONFIRMING_DELETE = State()
+
+
+@dp.message(Command("delete_coin"))
+async def start_delete_coin(message: types.Message, state: FSMContext):
+    chat_id = message.chat.id
+
+    async for session in db_helper.session_getter():
+        try:
+            user_service = UserService(session)
+            if not await user_service.is_superuser(chat_id):
+                await message.answer("У вас нет прав для выполнения этой команды.", reply_markup=main_keyboard)
+                return
+
+            coin_service = CoinService(session)
+            all_coins = await coin_service.get_all_coins()
+
+            if not all_coins:
+                await message.answer("Список монет пуст. Нечего удалять.", reply_markup=main_keyboard)
+                return
+
+            coins_text = "\n".join(
+                [f"{coin.id}: {coin.code} - {coin.coin_id_for_price_getter or 'Не указан'}" for coin in all_coins])
+            await message.answer(
+                f"Список всех монет (ID: код - код для источника):\n\n{coins_text}\n\nВведите ID монеты, которую хотите удалить:")
+
+            await state.set_state(DeleteCoinStates.CHOOSING_COIN)
+        except Exception as e:
+            logging.error(f"Failed to get coins for deletion: {e}")
+            await message.answer("Произошла ошибка при получении списка монет.", reply_markup=main_keyboard)
+        finally:
+            await session.close()
+
+
+@dp.message(DeleteCoinStates.CHOOSING_COIN)
+async def process_coin_choice_for_delete(message: types.Message, state: FSMContext):
+    try:
+        coin_id = UUID(message.text)
+        await state.update_data(coin_id=str(coin_id))
+
+        async for session in db_helper.session_getter():
+            try:
+                coin_service = CoinService(session)
+                coin = await coin_service.get_coin_by_id(coin_id)
+                if coin:
+                    await message.answer(f"Вы уверены, что хотите удалить монету {coin.code}? (Да/Нет)")
+                    await state.set_state(DeleteCoinStates.CONFIRMING_DELETE)
+                else:
+                    await message.answer("Монета с указанным ID не найдена.", reply_markup=main_keyboard)
+                    await state.clear()
+            except Exception as e:
+                logging.error(f"Failed to get coin for deletion: {e}")
+                await message.answer("Произошла ошибка при получении информации о монете.", reply_markup=main_keyboard)
+                await state.clear()
+            finally:
+                await session.close()
+    except ValueError:
+        await message.answer("Пожалуйста, введите корректный ID монеты.")
+
+
+@dp.message(DeleteCoinStates.CONFIRMING_DELETE)
+async def confirm_coin_deletion(message: types.Message, state: FSMContext):
+    if message.text.lower() == "да":
+        data = await state.get_data()
+        coin_id = data['coin_id']
+
+        async for session in db_helper.session_getter():
+            try:
+                coin_service = CoinService(session)
+                deleted = await coin_service.delete_coin(coin_id)
+                if deleted:
+                    await message.answer("Монета успешно удалена.", reply_markup=main_keyboard)
+                else:
+                    await message.answer("Не удалось удалить монету. Возможно, она уже была удалена.",
+                                         reply_markup=main_keyboard)
+            except Exception as e:
+                logging.error(f"Failed to delete coin: {e}")
+                await message.answer("Произошла ошибка при удалении монеты.", reply_markup=main_keyboard)
+            finally:
+                await session.close()
+    else:
+        await message.answer("Удаление монеты отменено.", reply_markup=main_keyboard)
 
     await state.clear()
 
