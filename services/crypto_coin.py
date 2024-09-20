@@ -30,6 +30,10 @@ class CoinService:
         result = await self.session.execute(select(Coin))
         return [coin for coin in result.scalars().all()]
 
+    async def get_all_active_coins(self) -> List[Coin]:
+        result = await self.session.execute(select(Coin).where(Coin.is_active == True))
+        return [coin for coin in result.scalars().all()]
+
     async def update_coin(self, coin_id: UUID, code: str = None, name: str = None,
                           coin_id_for_price_getter: str = None) -> Type[Coin] | None:
         coin = await self.session.get(Coin, coin_id)

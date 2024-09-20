@@ -1,7 +1,11 @@
 from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .tg_user_coin_association import UserCoinAssociation
 
 
 class Coin(Base):
@@ -11,26 +15,7 @@ class Coin(Base):
 
     coin_id_for_price_getter: Mapped[String] = mapped_column(String, nullable=True)
 
-    # chains: Mapped[List["Chain"]] = relationship(
-    #     "Chain",
-    #     secondary=coin_chain,
-    #     back_populates="coins",
-    #     lazy="selectin",
-    #     cascade="save-update, merge",
-    # )
-    # pools: Mapped[List["CoinPoolOffer"]] = relationship(
-    #     "CoinPoolOffer",
-    #     back_populates="coin",
-    #     lazy="noload",
-    #     cascade="save-update, merge, delete, delete-orphan",
-    # )
-    # prices: Mapped[List["CoinPrice"]] = relationship(
-    #     "CoinPrice",
-    #     back_populates="coin",
-    #     lazy="noload",
-    #     cascade="all, delete-orphan",
-    #     order_by="desc(CoinPrice.created_at)",
-    # )
+    user_associations: Mapped[list["UserCoinAssociation"]] = relationship(back_populates="coin")
 
     def __repr__(self):
         return f"Coin(code='{self.code}', id={self.id})"
