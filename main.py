@@ -71,41 +71,6 @@ async def price_handler(message: types.Message):
     await message.answer(f"ЭТА КОМАНДА НЕ ДОСТРОЕНА", reply_markup=main_keyboard)
 
 
-# @dp.message(Command("add_coin"))
-# async def add_coin_handler(message: types.Message):
-#     chat_id = message.chat.id
-#     args = message.text.split()[1:]  # Получаем аргументы команды
-#
-#     if len(args) < 1:
-#         await message.answer("Использование: /add_coin <код> [название] [id_для_получения_цены]", reply_markup=main_keyboard)
-#         return
-#
-#     async for session in db_helper.session_getter():
-#         try:
-#             user_service = UserService(session)
-#             if not await user_service.is_superuser(chat_id):
-#                 await message.answer("У вас нет прав для выполнения этой команды.", reply_markup=main_keyboard)
-#                 return
-#
-#             coin_service = CoinService(session)
-#             code = args[0].upper()
-#             name = args[1] if len(args) > 1 else None
-#             coin_id_for_price_getter = args[2] if len(args) > 2 else None
-#
-#             existing_coin = await coin_service.get_coin_by_code(code)
-#             if existing_coin:
-#                 await message.answer(f"Монета с кодом {code} уже существует.", reply_markup=main_keyboard)
-#                 return
-#
-#             new_coin = await coin_service.add_coin(code, name, coin_id_for_price_getter)
-#             await message.answer(f"Монета успешно добавлена: {new_coin}", reply_markup=main_keyboard)
-#
-#         except Exception as e:
-#             logging.error(f"Failed to add coin: {e}")
-#             await message.answer("Произошла ошибка при добавлении монеты. Попробуйте позже.", reply_markup=main_keyboard)
-#         finally:
-#             await session.close()
-
 class AddCoinStates(StatesGroup):
     WAITING_FOR_CODE = State()
     WAITING_FOR_NAME = State()
@@ -187,6 +152,7 @@ async def confirm_add_more(message: types.Message, state: FSMContext):
         async for session in db_helper.session_getter():
             try:
                 coin_service = CoinService(session)
+                
                 all_coins = await coin_service.get_all_coins()
 
                 coins_text = "\n".join(

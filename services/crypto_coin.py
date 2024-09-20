@@ -1,4 +1,6 @@
-from sqlalchemy import select, Sequence
+from typing import List
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import Coin
@@ -19,6 +21,6 @@ class CoinService:
         result = await self.session.execute(select(Coin).where(Coin.code == code))
         return result.scalar_one_or_none()
 
-    async def get_all_coins(self) -> Sequence[Coin]:
+    async def get_all_coins(self) -> List[Coin]:
         result = await self.session.execute(select(Coin))
         return [coin for coin in result.scalars().all()]
