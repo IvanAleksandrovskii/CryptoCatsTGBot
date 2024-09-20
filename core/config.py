@@ -19,6 +19,12 @@ POSTGRES_MAX_OVERFLOW = int(os.getenv("POSTGRES_MAX_OVERFLOW", 20))
 
 POSTGRES_ECHO = os.getenv("POSTGRES_ECHO", "True").lower() in ('true', '1')
 
+# App ENV variables
+DEBUG = os.getenv("DEBUG", "True").lower() in ('true', '1')
+
+HTTP_CLIENT_TIMEOUT = int(os.getenv("HTTP_CLIENT_TIMEOUT", "300"))
+HTTP_CLIENTS_MAX_KEEPALIVE_CONNECTIONS = int(os.getenv("HTTP_CLIENTS_MAX_KEEPALIVE_CONNECTIONS", "5"))
+
 
 class DBConfig(BaseModel):
     url: PostgresDsn = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_ADDRESS}:5432/{POSTGRES_DB}"
@@ -41,8 +47,19 @@ class DBConfig(BaseModel):
         return v
 
 
+class RunConfig(BaseModel):
+    debug: bool = DEBUG
+
+
+class HTTPClientConfig(BaseModel):
+    timeout: int = HTTP_CLIENT_TIMEOUT
+    max_keepalive_connections: int = HTTP_CLIENTS_MAX_KEEPALIVE_CONNECTIONS
+
+
 class Settings(BaseSettings):
+    run: RunConfig = RunConfig()
     db: DBConfig = DBConfig()
+    http_client: HTTPClientConfig = HTTPClientConfig()
 
 
 settings = Settings()
