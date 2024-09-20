@@ -21,4 +21,4 @@ class CoinService:
 
     async def get_all_coins(self) -> Sequence[Coin]:
         result = await self.session.execute(select(Coin))
-        return result.scalars().all()
+        return [coin for coin in result.scalars().all()]
