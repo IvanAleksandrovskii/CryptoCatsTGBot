@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Type
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,3 +24,17 @@ class CoinService:
     async def get_all_coins(self) -> List[Coin]:
         result = await self.session.execute(select(Coin))
         return [coin for coin in result.scalars().all()]
+
+    async def update_coin(self, coin_id: int, code: str = None, name: str = None,
+                          coin_id_for_price_getter: str = None) -> Type[Coin] | None:
+        coin = await self.session.get(Coin, coin_id)
+        if coin:
+            if code is not None:
+                coin.code = code
+            if name is not None:
+                coin.name = name
+            if coin_id_for_price_getter is not None:
+                coin.coin_id_for_price_getter = coin_id_for_price_getter
+            await self.session.commit()
+            await self.session.refresh(coin)
+        return coin

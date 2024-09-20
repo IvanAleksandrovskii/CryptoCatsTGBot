@@ -152,7 +152,7 @@ async def confirm_add_more(message: types.Message, state: FSMContext):
         async for session in db_helper.session_getter():
             try:
                 coin_service = CoinService(session)
-                
+
                 all_coins = await coin_service.get_all_coins()
 
                 coins_text = "\n".join(
@@ -171,6 +171,101 @@ async def confirm_add_more(message: types.Message, state: FSMContext):
         await state.clear()
     else:
         await message.answer("Пожалуйста, выберите одну из предложенных опций.", reply_markup=main_keyboard)
+
+
+class EditCoinStates(StatesGroup):
+    CHOOSING_COIN = State()
+    EDITING_CODE = State()
+    EDITING_NAME = State()
+    EDITING_PRICE_ID = State()
+    CONFIRM_EDIT = State()
+
+
+@dp.message(Command("edit_coins"))
+async def start_edit_coins(message: types.Message, state: FSMContext):
+    chat_id = message.chat.id
+
+    async for session in db_helper.session_getter():
+        try:
+            user_service = UserService(session)
+            if not await user_service.is_superuser(chat_id):
+                await message.answer("У вас нет прав для выполнения этой команды.", reply_markup=main_keyboard)
+                return
+
+            coin_service = CoinService(session)
+            all_coins = await coin_service.get_all_coins()
+
+            if not all_coins:
+                await message.answer("Список монет пуст. Нечего редактировать.", reply_markup=main_keyboard)
+                return
+
+            coins_text = "\n".join(
+                [f"{coin.id}: {coin.code} - {coin.coin_id_for_price_getter or 'Не указан'}" for coin in all_coins])
+            await message.answer(
+                f"Список всех монет (ID: код - код для источника):\n\n{coins_text}\n\nВведите ID монеты, которую хотите отредактировать:")
+
+            await state.set_state(EditCoinStates.CHOOSING_COIN)
+        except Exception as e:
+            logging.error(f"Failed to get coins for editing: {e}")
+            await message.answer("Произошла ошибка при получении списка монет.", reply_markup=main_keyboard)
+        finally:
+            await session.close()
+
+
+@dp.message(EditCoinStates.CHOOSING_COIN)
+async def process_coin_choice(message: types.Message, state: FSMContext):
+    try:
+        coin_id = str(message.text)
+        await state.update_data(coin_id=coin_id)
+        await state.set_state(EditCoinStates.EDITING_CODE)
+        await message.answer("Введите новый код монеты (или /skip для пропуска):")
+    except ValueError:
+        await message.answer("Пожалуйста, введите корректный ID монеты.")
+
+
+@dp.message(EditCoinStates.EDITING_CODE)
+async def process_edit_code(message: types.Message, state: FSMContext):
+    if message.text != "/skip":
+        await state.update_data(new_code=message.text.upper())
+    await state.set_state(EditCoinStates.EDITING_NAME)
+    await message.answer("Введите новое название монеты (или /skip для пропуска):")
+
+
+@dp.message(EditCoinStates.EDITING_NAME)
+async def process_edit_name(message: types.Message, state: FSMContext):
+    if message.text != "/skip":
+        await state.update_data(new_name=message.text)
+    await state.set_state(EditCoinStates.EDITING_PRICE_ID)
+    await message.answer("Введите новый ID для получения цены (или /skip для пропуска):")
+
+
+@dp.message(EditCoinStates.EDITING_PRICE_ID)
+async def process_edit_price_id(message: types.Message, state: FSMContext):
+    if message.text != "/skip":
+        await state.update_data(new_coin_id_for_price_getter=message.text)
+
+    data = await state.get_data()
+    coin_id = data['coin_id']
+    new_code = data.get('new_code')
+    new_name = data.get('new_name')
+    new_coin_id_for_price_getter = data.get('new_coin_id_for_price_getter')
+
+    async for session in db_helper.session_getter():
+        try:
+            coin_service = CoinService(session)
+            updated_coin = await coin_service.update_coin(coin_id, new_code, new_name, new_coin_id_for_price_getter)
+
+            if updated_coin:
+                await message.answer(f"Монета успешно обновлена: {updated_coin}", reply_markup=main_keyboard)
+            else:
+                await message.answer("Монета с указанным ID не найдена.", reply_markup=main_keyboard)
+        except Exception as e:
+            logging.error(f"Failed to update coin: {e}")
+            await message.answer("Произошла ошибка при обновлении монеты.", reply_markup=main_keyboard)
+        finally:
+            await session.close()
+
+    await state.clear()
 
 
 async def main():
