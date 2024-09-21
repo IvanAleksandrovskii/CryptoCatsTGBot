@@ -129,7 +129,10 @@ async def replace_coin(callback_query: types.CallbackQuery, state: FSMContext):
                 await callback_query.answer("Произошла ошибка: пользователь не найден.")
                 return
 
-            await user_service.remove_coin_from_user(user.id, coin_id)
+            deleted = await user_service.remove_coin_from_user(user.chat_id, coin_id)
+            if not deleted:
+                await callback_query.answer("Не удалось удалить монету. Попробуйте еще раз.")
+                return
 
             coin_service = CoinService(session)
             coin = await coin_service.get_coin_by_id(coin_id)
@@ -138,8 +141,8 @@ async def replace_coin(callback_query: types.CallbackQuery, state: FSMContext):
                 await callback_query.answer("Произошла ошибка: монета не найдена.")
                 return
 
-            await state.update_data(selected_coin=coin)
-            await callback_query.message.answer(f"Монета {coin.code} удалена. Теперь давайте добавим её заново.")
+            await state.update_data(selected_coin=coin, user_id=user.id)
+            await callback_query.message.edit_text(f"Монета {coin.code} удалена. Теперь давайте добавим её заново.")
             await callback_query.message.answer(f"Введите минимальный курс для {coin.code} (или 'пропустить' / '/empty'):")
             await state.set_state(UserCoinManagementStates.SETTING_MIN_RATE)
         finally:
@@ -150,7 +153,8 @@ async def replace_coin(callback_query: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(lambda c: c.data == "cancel_add_coin")
 async def cancel_add_coin(callback_query: types.CallbackQuery, state: FSMContext):
-    await callback_query.message.answer("Добавление монеты отменено.", reply_markup=coin_management_keyboard)
+    await callback_query.message.edit_text("Добавление монеты отменено.")
+    await callback_query.message.answer("Выберите действие:", reply_markup=coin_management_keyboard)
     await state.set_state(UserCoinManagementStates.CHOOSING_ACTION)
     await callback_query.answer()
 
