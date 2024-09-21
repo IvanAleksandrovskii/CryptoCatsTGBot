@@ -1,6 +1,6 @@
 import asyncio
 from aiogram import Bot
-from aiogram.types import InputFile
+# from aiogram.types import InputFile
 
 from core import logger
 from core.models import db_helper, Coin, UserCoinAssociation
@@ -14,7 +14,8 @@ class PriceMonitor:
         self.update_interval = update_interval
         self.crypto_price_service = CryptoPriceService()
 
-    async def check_price_conditions(self, user_id: int, coin: Coin, association: UserCoinAssociation, current_price: float, cat_image_url: str):
+    @staticmethod
+    def check_price_conditions(coin: Coin, association: UserCoinAssociation, current_price: float):
         conditions_met = []
 
         if association.min_rate and current_price <= association.min_rate:
@@ -36,18 +37,19 @@ class PriceMonitor:
                 conditions_met.append(
                     f"Цена {coin.code} упала на {decline:.2f}% (больше {association.rate_percentage_declines:.2f}%)")
 
-        if conditions_met:
-            message = "Уведомление о изменении цены:\n" + "\n".join(conditions_met)
-            await self.bot.send_photo(user_id, photo=cat_image_url, caption=message)
+        return conditions_met
 
     async def process_user(self, user, current_prices, cat_image_url):
         async with db_helper.db_session() as session:
             user_service = UserService(session)
             user_coins = await user_service.get_user_coins(user.chat_id)
+
+            all_conditions_met = []
             for coin, association in user_coins:
                 if coin.coin_id_for_price_getter in current_prices:
                     current_price = current_prices[coin.coin_id_for_price_getter]
-                    await self.check_price_conditions(user.chat_id, coin, association, current_price, cat_image_url)
+                    conditions_met = self.check_price_conditions(coin, association, current_price)
+                    all_conditions_met.extend(conditions_met)
 
                     # Update saved_rate_to_compare
                     await user_service.update_user_coin(
@@ -56,6 +58,10 @@ class PriceMonitor:
                         association.id,
                         saved_rate_to_compare=current_price
                     )
+
+            if all_conditions_met:
+                message = "Уведомление о изменении цены:\n" + "\n".join(all_conditions_met)
+                await self.bot.send_photo(user.chat_id, photo=cat_image_url, caption=message)
 
     async def update_prices_and_notify(self):
         try:
