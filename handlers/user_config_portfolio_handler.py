@@ -110,7 +110,7 @@ async def process_coin_addition(message: types.Message, state: FSMContext):
                 return
 
             await state.update_data(selected_coin=selected_coin, user_id=user.id)
-            await message.answer(f"Введите минимальный курс для {selected_coin.code} (или 'пропустить'):")
+            await message.answer(f"Введите минимальный курс для {selected_coin.code} (или 'пропустить' / '/empty'):")
             await state.set_state(UserCoinManagementStates.SETTING_MIN_RATE)
         finally:
             await session.close()
@@ -118,7 +118,6 @@ async def process_coin_addition(message: types.Message, state: FSMContext):
 
 @router.callback_query(lambda c: c.data.startswith("replace_coin:"))
 async def replace_coin(callback_query: types.CallbackQuery, state: FSMContext):
-
     coin_id = callback_query.data.split(":")[1]
 
     async for session in db_helper.session_getter():
@@ -140,7 +139,7 @@ async def replace_coin(callback_query: types.CallbackQuery, state: FSMContext):
 
             await state.update_data(selected_coin=coin)
             await callback_query.message.answer(f"Монета {coin.code} удалена. Теперь давайте добавим её заново.")
-            await callback_query.message.answer(f"Введите минимальный курс для {coin.code} (или 'пропустить'):")
+            await callback_query.message.answer(f"Введите минимальный курс для {coin.code} (или 'пропустить' / '/empty'):")
             await state.set_state(UserCoinManagementStates.SETTING_MIN_RATE)
         finally:
             await session.close()
@@ -157,62 +156,62 @@ async def cancel_add_coin(callback_query: types.CallbackQuery, state: FSMContext
 
 @router.message(UserCoinManagementStates.SETTING_MIN_RATE)
 async def process_min_rate(message: types.Message, state: FSMContext):
-    if message.text.lower() == 'пропустить':
+    if message.text.lower() in ['пропустить', '/empty']:
         await state.update_data(min_rate=None)
     else:
         try:
             min_rate = float(message.text)
             await state.update_data(min_rate=min_rate)
         except ValueError:
-            await message.answer("Пожалуйста, введите корректное числовое значение или 'пропустить'.")
+            await message.answer("Пожалуйста, введите корректное числовое значение, 'пропустить' или '/empty'.")
             return
 
-    await message.answer("Введите максимальный курс (или 'пропустить'):")
+    await message.answer("Введите максимальный курс (или 'пропустить' / '/empty'):")
     await state.set_state(UserCoinManagementStates.SETTING_MAX_RATE)
 
 
 @router.message(UserCoinManagementStates.SETTING_MAX_RATE)
 async def process_max_rate(message: types.Message, state: FSMContext):
-    if message.text.lower() == 'пропустить':
+    if message.text.lower() in ['пропустить', '/empty']:
         await state.update_data(max_rate=None)
     else:
         try:
             max_rate = float(message.text)
             await state.update_data(max_rate=max_rate)
         except ValueError:
-            await message.answer("Пожалуйста, введите корректное числовое значение или 'пропустить'.")
+            await message.answer("Пожалуйста, введите корректное числовое значение, 'пропустить' или '/empty'.")
             return
 
-    await message.answer("Введите процент роста (или 'пропустить'):")
+    await message.answer("Введите процент роста (или 'пропустить' / '/empty'):")
     await state.set_state(UserCoinManagementStates.SETTING_GROWTH_PERCENTAGE)
 
 
 @router.message(UserCoinManagementStates.SETTING_GROWTH_PERCENTAGE)
 async def process_growth_percentage(message: types.Message, state: FSMContext):
-    if message.text.lower() == 'пропустить':
+    if message.text.lower() in ['пропустить', '/empty']:
         await state.update_data(growth_percentage=None)
     else:
         try:
             growth_percentage = float(message.text)
             await state.update_data(growth_percentage=growth_percentage)
         except ValueError:
-            await message.answer("Пожалуйста, введите корректное числовое значение или 'пропустить'.")
+            await message.answer("Пожалуйста, введите корректное числовое значение, 'пропустить' или '/empty'.")
             return
 
-    await message.answer("Введите процент падения (или 'пропустить'):")
+    await message.answer("Введите процент падения (или 'пропустить' / '/empty'):")
     await state.set_state(UserCoinManagementStates.SETTING_DECLINE_PERCENTAGE)
 
 
 @router.message(UserCoinManagementStates.SETTING_DECLINE_PERCENTAGE)
 async def process_decline_percentage(message: types.Message, state: FSMContext):
-    if message.text.lower() == 'пропустить':
+    if message.text.lower() in ['пропустить', '/empty']:
         await state.update_data(decline_percentage=None)
     else:
         try:
             decline_percentage = float(message.text)
             await state.update_data(decline_percentage=decline_percentage)
         except ValueError:
-            await message.answer("Пожалуйста, введите корректное числовое значение или 'пропустить'.")
+            await message.answer("Пожалуйста, введите корректное числовое значение, 'пропустить' или '/empty'.")
             return
 
     await save_user_coin(message, state)
@@ -351,30 +350,6 @@ async def process_edit_parameter(message: types.Message, state: FSMContext):
         await message.answer(f"Текущий процент падения: {association.rate_percentage_declines}\n"
                              f"Введите новый процент падения для {selected_coin.code}:")
         await state.update_data(editing_param="rate_percentage_declines")
-
-
-# @router.message(UserCoinManagementStates.EDITING_COIN)
-# async def process_new_value(message: types.Message, state: FSMContext):
-#     user_data = await state.get_data()
-#     selected_coin = user_data['selected_coin']
-#     editing_param = user_data['editing_param']
-#
-#     try:
-#         new_value = float(message.text)
-#     except ValueError:
-#         await message.answer("Пожалуйста, введите корректное числовое значение.")
-#         return
-#
-#     async for session in db_helper.session_getter():
-#         try:
-#             user_service = UserService(session)
-#             await user_service.update_user_coin(message.from_user.id, selected_coin.id, **{editing_param: new_value})
-#
-#             await message.answer(f"Параметр {editing_param} для {selected_coin.code} успешно обновлен!",
-#                                  reply_markup=coin_management_keyboard)
-#             await state.set_state(UserCoinManagementStates.CHOOSING_ACTION)
-#         finally:
-#             await session.close()
 
 
 async def choose_coin_to_delete(message: types.Message, state: FSMContext):

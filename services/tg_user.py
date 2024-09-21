@@ -45,7 +45,9 @@ class UserService:
             .join(UserCoinAssociation, Coin.id == UserCoinAssociation.coin_id)
             .where(UserCoinAssociation.user_id == user.id)
         )
-        return result.fetchall()
+        result = result.fetchall()
+        result = [(coin, association) for coin, association in result]
+        return result
 
     async def update_user_coin(self, chat_id: int, coin_id: UUID, association_id: UUID, **kwargs) -> bool:
         user = await self.get_user(chat_id)
@@ -62,7 +64,6 @@ class UserService:
             for key, value in kwargs.items():
                 setattr(association, key, value)
             await self.session.commit()
-            await self.session.refresh(association)
             return True
         return False
 
