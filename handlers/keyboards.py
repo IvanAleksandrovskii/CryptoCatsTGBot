@@ -11,7 +11,10 @@ main_keyboard = ReplyKeyboardMarkup(
 admin_keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="/start"), KeyboardButton(text="/admin_help"), ],
               [KeyboardButton(text="/list_coins"), KeyboardButton(text="/add_coin"), ],
-              [KeyboardButton(text="/edit_coin"), KeyboardButton(text="/delete_coin"),]],
+              [KeyboardButton(text="/edit_coin"), KeyboardButton(text="/delete_coin"),],
+              [KeyboardButton(text="/broadcast"), KeyboardButton(text="/send_personal")],
+              [KeyboardButton(text="/list_users")],
+              ],
     resize_keyboard=True
 )
 
